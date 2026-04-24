@@ -121,7 +121,7 @@ function SourcePanel({
           <button type="button" className="danger" onClick={onDismiss}>
             Mark explored
           </button>
-          <button type="button" onClick={onKeep}>
+          <button type="button" className="button-secondary" onClick={onKeep}>
             Keep in pile
           </button>
         </div>

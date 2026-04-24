@@ -16,7 +16,7 @@ function ThoughtInput({ input, onInputChange, onSubmit, inputRef }) {
           placeholder="e.g. dark matter, Ottoman calligraphy, CRDTs"
           onChange={(event) => onInputChange(event.target.value)}
         />
-        <button type="submit" disabled={!hasInput}>
+        <button type="submit" disabled={!hasInput} className="button-primary">
           Add
         </button>
       </div>

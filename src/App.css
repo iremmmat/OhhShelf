@@ -1,37 +1,48 @@
 .app {
-  max-width: 1100px;
+  max-width: 1040px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 2rem 1.5rem;
 }
 
 .top-bar h1 {
-  margin-bottom: 0.3rem;
+  margin: 0;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 2.35rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: #0f3224;
 }
 
 .top-bar p {
-  margin-top: 0;
-  color: #4b5563;
+  margin-top: 0.4rem;
+  color: #78716c;
+  max-width: 48rem;
 }
 
 .layout {
   display: grid;
   grid-template-columns: 1fr 1.2fr;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  gap: 1.25rem;
+  margin-top: 2rem;
 }
 
 .pile-panel,
 .source-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 1.25rem;
   background: #fff;
+  box-shadow: 0 1px 0 rgba(28, 25, 23, 0.02);
 }
 
 .thought-form label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.55rem;
+  color: #44403c;
+  font-size: 0.74rem;
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .input-row {
@@ -42,23 +53,44 @@
 .input-row input {
   flex: 1;
   min-width: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 4px;
+  padding: 0.62rem 0.75rem;
   font-size: 0.95rem;
+  background: #fbf9f8;
+}
+
+.input-row input:focus {
+  outline: none;
+  border-color: #0f3224;
 }
 
 button {
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border: 1px solid #d6d3d1;
+  border-radius: 4px;
   padding: 0.55rem 0.85rem;
   cursor: pointer;
-  background: #f9fafb;
+  background: transparent;
+  color: #1c1917;
+  font-family: 'Work Sans', sans-serif;
+  font-weight: 500;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.45;
+}
+
+.button-primary {
+  background: #0f3224;
+  border-color: #0f3224;
+  color: #fff;
+}
+
+.button-secondary {
+  border-color: #0f3224;
+  color: #0f3224;
+  background: transparent;
 }
 
 .pile-header {
@@ -69,10 +101,13 @@ button:disabled {
 }
 
 .pile-header span {
-  font-size: 0.8rem;
-  background: #e5e7eb;
+  font-size: 0.74rem;
+  color: #57534e;
+  background: #f5f5f4;
   padding: 0.25rem 0.5rem;
   border-radius: 999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .thought-list {
@@ -91,13 +126,14 @@ button:disabled {
 }
 
 .thought-chip {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: #fafaf9;
+  border-color: #d6d3d1;
+  font-size: 0.92rem;
 }
 
 .remove-button {
-  background: #fef2f2;
-  border-color: #fecaca;
+  background: #fff;
+  border-color: #e7e5e4;
   opacity: 0;
   transition: opacity 0.15s ease-in;
 }
@@ -126,15 +162,16 @@ button:disabled {
 }
 
 .mode-toggle .active {
-  background: #111827;
+  background: #0f3224;
   color: #fff;
-  border-color: #111827;
+  border-color: #0f3224;
 }
 
 .source-block {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 4px;
   padding: 0.75rem;
+  background: #fff;
 }
 
 .source-list {
@@ -144,27 +181,37 @@ button:disabled {
 }
 
 .matched-title {
-  font-size: 0.9rem;
-  color: #4b5563;
+  font-size: 0.8rem;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .attribution {
-  font-size: 0.9rem;
-  color: #1f2937;
+  font-size: 0.82rem;
+  color: #44403c;
   margin-top: 0.5rem;
 }
 
 .placeholder,
 .empty-state {
-  color: #6b7280;
+  color: #78716c;
+}
+
+.source-panel h2,
+.pile-panel h2 {
+  font-family: 'Newsreader', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #1c1917;
 }
 
 .error-box {
   margin-top: 0.8rem;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 4px;
   padding: 0.75rem;
-  background: #fff7f7;
+  background: #fafaf9;
 }
 
 .fallback-links {
@@ -180,19 +227,20 @@ button:disabled {
 }
 
 .panel-actions .danger {
-  background: #fee2e2;
-  border-color: #fca5a5;
+  background: #0f3224;
+  border-color: #0f3224;
+  color: #fff;
 }
 
 .deeper-topics {
   margin-top: 1rem;
-  border-top: 1px solid #e4e2e2;
+  border-top: 1px solid #e7e5e4;
   padding-top: 1rem;
 }
 
 .deeper-topics h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #2c4d3e;
@@ -211,10 +259,10 @@ button:disabled {
 }
 
 .deeper-topic-list button {
-  background: #f5f3f3;
-  border-color: #c1c8c2;
+  background: #f5f5f4;
+  border-color: #d6d3d1;
   color: #1b1c1c;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .deeper-topic-list button:hover {
