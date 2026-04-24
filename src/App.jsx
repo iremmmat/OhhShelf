@@ -8,6 +8,7 @@ import {
   fallbackMessage,
   fetchDeeperTopicSuggestions,
   fetchBriefSource,
+  fetchFallbackSources,
   fetchFullSource,
   fetchOfficialWebsiteSource,
   normalizeTitle,
@@ -45,6 +46,7 @@ function App() {
   )
 
   async function loadSources(thoughtText, selectedMode) {
+    const displayTopic = thoughtText.replace(/_/g, ' ')
     setIsLoading(true)
     setErrorMessage('')
     setSources([])
@@ -67,10 +69,19 @@ function App() {
         nextSources.push(officialSource)
       }
       setSources(nextSources)
-      const suggestions = await fetchDeeperTopicSuggestions(thoughtText.replace(/_/g, ' '))
+      const suggestions = await fetchDeeperTopicSuggestions(displayTopic)
       setDeeperTopics(suggestions)
     } catch (error) {
-      setErrorMessage(error.message || fallbackMessage())
+      const fallbackSources = await fetchFallbackSources(displayTopic)
+      if (fallbackSources.length > 0) {
+        setResolvedTitle(`Fallback results for ${displayTopic}`)
+        setSources(fallbackSources)
+        const suggestions = await fetchDeeperTopicSuggestions(displayTopic)
+        setDeeperTopics(suggestions)
+        setErrorMessage('')
+      } else {
+        setErrorMessage(error.message || fallbackMessage())
+      }
     } finally {
       setIsLoading(false)
     }

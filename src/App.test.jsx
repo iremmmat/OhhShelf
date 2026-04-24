@@ -27,6 +27,7 @@ vi.mock('./lib/sourcing', () => ({
     'Types of mushrooms',
     'How mushrooms grow',
   ]),
+  fetchFallbackSources: vi.fn(async () => []),
 }))
 
 describe('App integration', () => {

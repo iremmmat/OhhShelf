@@ -13,6 +13,35 @@ function SourcePanel({
   onDismiss,
   onKeep,
 }) {
+  const externalSources = activeThought
+    ? [
+        {
+          label: 'Wikipedia',
+          href: `https://en.wikipedia.org/wiki/${normalizeTitle(activeThought.text)}`,
+        },
+        {
+          label: 'Wikidata',
+          href: `https://www.wikidata.org/w/index.php?search=${encodeURIComponent(activeThought.text)}`,
+        },
+        {
+          label: 'Britannica',
+          href: `https://www.britannica.com/search?query=${encodeURIComponent(activeThought.text)}`,
+        },
+        {
+          label: 'Stanford Encyclopedia',
+          href: `https://plato.stanford.edu/search/searcher.py?query=${encodeURIComponent(activeThought.text)}`,
+        },
+        {
+          label: 'Google Scholar',
+          href: `https://scholar.google.com/scholar?q=${encodeURIComponent(activeThought.text)}`,
+        },
+        {
+          label: 'Google',
+          href: `https://www.google.com/search?q=${encodeURIComponent(activeThought.text)}`,
+        },
+      ]
+    : []
+
   return (
     <section className="source-panel">
       <div className="panel-header">
@@ -43,27 +72,11 @@ function SourcePanel({
         <div className="error-box">
           <p>{errorMessage || fallbackMessage()}</p>
           <div className="fallback-links">
-            <a
-              href={`https://en.wikipedia.org/wiki/${normalizeTitle(activeThought.text)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Wikipedia
-            </a>
-            <a
-              href={`https://www.britannica.com/search?query=${encodeURIComponent(activeThought.text)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Britannica
-            </a>
-            <a
-              href={`https://www.google.com/search?q=${encodeURIComponent(activeThought.text)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Google
-            </a>
+            {externalSources.map((source) => (
+              <a key={source.label} href={source.href} target="_blank" rel="noreferrer">
+                {source.label}
+              </a>
+            ))}
           </div>
         </div>
       )}

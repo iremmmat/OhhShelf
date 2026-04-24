@@ -3,6 +3,7 @@ import {
   fallbackMessage,
   fetchBriefSource,
   fetchDeeperTopicSuggestions,
+  fetchFallbackSources,
   fetchFullSource,
   fetchOfficialWebsiteSource,
   normalizeTitle,
@@ -130,5 +131,55 @@ describe('sourcing', () => {
     expect(results).toContain('Types of mushrooms')
     expect(results).toContain('How mushrooms grow')
     expect(results).toContain('Mushroom farming')
+  })
+
+  it('collects fallback sources from other providers', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          search: [
+            {
+              id: 'Q1',
+              concepturi: 'https://www.wikidata.org/wiki/Q1',
+              label: 'Mushroom',
+              description: 'A fungal fruiting body.',
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          docs: [
+            {
+              key: '/works/OL1W',
+              title: 'Mushrooms',
+              author_name: ['Author A'],
+              first_publish_year: 1999,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: {
+            items: [
+              {
+                URL: 'https://doi.org/10.1000/test',
+                title: ['Mushroom paper'],
+                issued: { 'date-parts': [[2020]] },
+              },
+            ],
+          },
+        }),
+      })
+
+    const results = await fetchFallbackSources('mushrooms')
+    expect(results.some((item) => item.name === 'Wikidata')).toBe(true)
+    expect(results.some((item) => item.name === 'OpenLibrary')).toBe(true)
+    expect(results.some((item) => item.name === 'Crossref')).toBe(true)
   })
 })
