@@ -1,0 +1,98 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  fallbackMessage,
+  fetchBriefSource,
+  fetchFullSource,
+  fetchOfficialWebsiteSource,
+  normalizeTitle,
+  resolveArticleTitle,
+} from './sourcing'
+
+describe('sourcing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('normalizes user input into a wikipedia title format', () => {
+    expect(normalizeTitle('dark   matter')).toBe('dark_matter')
+  })
+
+  it('returns fallback message copy', () => {
+    expect(fallbackMessage()).toContain("couldn't find sourced information")
+  })
+
+  it('resolves article title with opensearch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ['dark', ['Dark matter']],
+    })
+
+    await expect(resolveArticleTitle('dark')).resolves.toBe('Dark matter')
+  })
+
+  it('fetches and shapes brief wikipedia source', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        extract: 'A. B. C. D.',
+        content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Dark_matter' } },
+      }),
+    })
+
+    const result = await fetchBriefSource('Dark matter')
+    expect(result.name).toBe('Wikipedia')
+    expect(result.url).toContain('wikipedia.org')
+    expect(result.excerpt.length).toBeGreaterThan(0)
+  })
+
+  it('fetches and strips html from full wikipedia source', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        lead: {
+          displaytitle: 'Dark matter',
+          sections: [{ text: '<p>Dark matter is matter.</p>' }],
+        },
+      }),
+    })
+
+    const result = await fetchFullSource('Dark matter')
+    expect(result.excerpt).toContain('Dark matter is matter.')
+    expect(result.excerpt).not.toContain('<p>')
+  })
+
+  it('returns wikidata official website when present', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ wikibase_item: 'Q1' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          entities: {
+            Q1: {
+              labels: { en: { value: 'Example' } },
+              claims: {
+                P856: [
+                  {
+                    mainsnak: {
+                      datavalue: { value: 'https://example.org' },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      })
+
+    const result = await fetchOfficialWebsiteSource('Example')
+    expect(result).toEqual({
+      name: 'Wikidata',
+      url: 'https://example.org',
+      excerpt: 'Official website identified for Example.',
+    })
+  })
+})
