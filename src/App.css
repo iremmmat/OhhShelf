@@ -186,18 +186,21 @@ button:disabled {
 
 .deeper-topics {
   margin-top: 1rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #e4e2e2;
   padding-top: 1rem;
 }
 
 .deeper-topics h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2c4d3e;
 }
 
 .deeper-topics p {
   margin: 0.35rem 0 0.75rem;
-  color: #6b7280;
+  color: #626361;
   font-size: 0.9rem;
 }
 
@@ -208,8 +211,15 @@ button:disabled {
 }
 
 .deeper-topic-list button {
-  background: #ecfeff;
-  border-color: #bae6fd;
+  background: #f5f3f3;
+  border-color: #c1c8c2;
+  color: #1b1c1c;
+  border-radius: 6px;
+}
+
+.deeper-topic-list button:hover {
+  background: #ffffff;
+  border-color: #436555;
 }
 
 @media (max-width: 900px) {

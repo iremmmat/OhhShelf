@@ -169,23 +169,84 @@ export async function fetchOfficialWebsiteSource(title) {
   )
 }
 
+const STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'about',
+  'into',
+  'that',
+  'this',
+  'what',
+  'when',
+  'where',
+  'how',
+  'why',
+  'who',
+  'are',
+  'is',
+  'of',
+  'to',
+  'in',
+  'on',
+  'a',
+  'an',
+])
+
+function getGrowthVerb(topic) {
+  return topic.toLowerCase().endsWith('s') ? 'grow' : 'grows'
+}
+
 const DIVE_DEEPER_TEMPLATES = [
   (topic) => `Types of ${topic}`,
-  (topic) => `How ${topic} grow`,
-  (topic) => `Where ${topic} grow`,
-  (topic) => `What is ${topic} good for`,
+  (topic) => `How ${topic} ${getGrowthVerb(topic)}`,
+  (topic) => `Where ${topic} ${getGrowthVerb(topic)}`,
+  (topic) => `What ${topic} is used for`,
+  (topic) => `History of ${topic}`,
+  (topic) => `Benefits and risks of ${topic}`,
 ]
+
+function getTopicTokens(topic) {
+  return topic
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !STOPWORDS.has(token))
+}
+
+function normalizeToken(token) {
+  return token.endsWith('s') ? token.slice(0, -1) : token
+}
+
+function scoreRelatedTitle(title, topicTokens) {
+  const normalizedTitle = title.toLowerCase()
+  const overlaps = topicTokens.filter((token) => {
+    const normalizedToken = normalizeToken(token)
+    return normalizedTitle.includes(token) || normalizedTitle.includes(normalizedToken)
+  }).length
+  return overlaps
+}
 
 export async function fetchDeeperTopicSuggestions(topic) {
   const baseTopic = topic.trim()
+  const topicTokens = getTopicTokens(baseTopic)
   const suggestions = DIVE_DEEPER_TEMPLATES.map((createTemplate) => createTemplate(baseTopic))
 
   try {
     const response = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(baseTopic)}&srlimit=8&format=json&origin=*`,
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`"${baseTopic}"`)}&srlimit=12&format=json&origin=*`,
     )
     const payload = await parseJsonResponse(response, 'Could not load related topics.')
-    const relatedTitles = (payload?.query?.search ?? []).map((item) => item?.title).filter(Boolean)
+    const relatedTitles = (payload?.query?.search ?? [])
+      .map((item) => item?.title)
+      .filter(Boolean)
+      .map((title) => ({ title, score: scoreRelatedTitle(title, topicTokens) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((item) => item.title)
     suggestions.push(...relatedTitles)
   } catch {
     return suggestions

@@ -5,6 +5,7 @@
 body {
   margin: 0;
   font-family:
+    'Work Sans',
     Inter,
     system-ui,
     -apple-system,
@@ -13,8 +14,8 @@ body {
     Helvetica,
     Arial,
     sans-serif;
-  color: #111827;
-  background: #f3f4f6;
+  color: #1b1c1c;
+  background: #fbf9f8;
 }
 
 #root {
