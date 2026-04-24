@@ -156,36 +156,40 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header className="top-bar">
-        <h1>Ooh Shelf</h1>
-        <p>Capture fleeting curiosities. Explore them later with real sources.</p>
-      </header>
+    <div className="app-shell">
+      <aside className="left-shell">
+        <header className="top-bar">
+          <h1>Ooh Shelf</h1>
+          <p>Capture fleeting curiosities. Explore them later with real sources.</p>
+        </header>
+      </aside>
 
-      <main className="layout">
-        <section className="pile-panel">
-          <ThoughtInput
-            input={input}
-            onInputChange={setInput}
-            onSubmit={addThought}
-            inputRef={inputRef}
+      <div className="app">
+        <main className="layout">
+          <section className="pile-panel">
+            <ThoughtInput
+              input={input}
+              onInputChange={setInput}
+              onSubmit={addThought}
+              inputRef={inputRef}
+            />
+            <ThoughtPile thoughts={thoughts} onOpenThought={openThought} onRemoveThought={removeThought} />
+          </section>
+          <SourcePanel
+            activeThought={activeThought}
+            mode={mode}
+            isLoading={isLoading}
+            errorMessage={errorMessage}
+            sources={sources}
+            deeperTopics={deeperTopics}
+            resolvedTitle={resolvedTitle}
+            onModeChange={handleModeChange}
+            onAddSuggestedTopic={addSuggestedTopic}
+            onDismiss={dismissActiveThought}
+            onKeep={closePanelKeepThought}
           />
-          <ThoughtPile thoughts={thoughts} onOpenThought={openThought} onRemoveThought={removeThought} />
-        </section>
-        <SourcePanel
-          activeThought={activeThought}
-          mode={mode}
-          isLoading={isLoading}
-          errorMessage={errorMessage}
-          sources={sources}
-          deeperTopics={deeperTopics}
-          resolvedTitle={resolvedTitle}
-          onModeChange={handleModeChange}
-          onAddSuggestedTopic={addSuggestedTopic}
-          onDismiss={dismissActiveThought}
-          onKeep={closePanelKeepThought}
-        />
-      </main>
+        </main>
+      </div>
     </div>
   )
 }
