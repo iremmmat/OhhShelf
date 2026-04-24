@@ -184,6 +184,34 @@ button:disabled {
   border-color: #fca5a5;
 }
 
+.deeper-topics {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 1rem;
+}
+
+.deeper-topics h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.deeper-topics p {
+  margin: 0.35rem 0 0.75rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.deeper-topic-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.deeper-topic-list button {
+  background: #ecfeff;
+  border-color: #bae6fd;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;

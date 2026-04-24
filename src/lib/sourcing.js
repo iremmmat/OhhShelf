@@ -40,31 +40,41 @@ function stripHtml(value) {
   return (doc.body.textContent ?? '').trim()
 }
 
-export async function resolveArticleTitle(query) {
-  const response = await fetch(
-    `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=1&namespace=0&format=json&origin=*`,
-  )
-
+async function parseJsonResponse(response, message) {
   if (!response.ok) {
+    throw new Error(message)
+  }
+
+  return response.json()
+}
+
+export async function resolveArticleTitle(query) {
+  let payload
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=1&namespace=0&format=json&origin=*`,
+    )
+    payload = await parseJsonResponse(response, 'Could not search Wikipedia for this topic.')
+  } catch {
     throw new Error('Could not search Wikipedia for this topic.')
   }
 
-  const payload = await response.json()
   const titles = payload?.[1] ?? []
   return titles[0] ?? null
 }
 
 export async function fetchBriefSource(title) {
-  const response = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-    { headers: { Accept: 'application/json' } },
-  )
-
-  if (!response.ok) {
+  let payload
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { headers: { Accept: 'application/json' } },
+    )
+    payload = await parseJsonResponse(response, 'Could not load a Wikipedia summary.')
+  } catch {
     throw new Error('Could not load a Wikipedia summary.')
   }
 
-  const payload = await response.json()
   const canonicalUrl = payload?.content_urls?.desktop?.page
   const excerpt = payload?.extract
   if (!canonicalUrl || !excerpt) {
@@ -75,58 +85,74 @@ export async function fetchBriefSource(title) {
 }
 
 export async function fetchFullSource(title) {
-  const response = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/mobile-sections/${encodeURIComponent(title)}`,
-    { headers: { Accept: 'application/json' } },
-  )
+  const canonicalUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
 
-  if (!response.ok) {
-    throw new Error('Could not load the full intro section.')
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/mobile-sections/${encodeURIComponent(title)}`,
+      { headers: { Accept: 'application/json' } },
+    )
+    const payload = await parseJsonResponse(response, 'Could not load the full intro section.')
+    const introSections = payload?.lead?.sections ?? []
+    const excerpt = introSections
+      .map((section) => stripHtml(section?.text))
+      .filter(Boolean)
+      .join('\n\n')
+      .trim()
+
+    if (excerpt) {
+      return sourceBlock('Wikipedia', canonicalUrl, excerpt)
+    }
+  } catch {
+    // Fall through to the MediaWiki query API fallback.
   }
 
-  const payload = await response.json()
-  const canonicalUrl = payload?.lead?.displaytitle
-    ? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
-    : null
-  const introSections = payload?.lead?.sections ?? []
-  const excerpt = introSections
-    .map((section) => stripHtml(section?.text))
-    .filter(Boolean)
-    .join('\n\n')
-    .trim()
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=${encodeURIComponent(title)}&explaintext=1&format=json&origin=*`,
+    )
+    const payload = await parseJsonResponse(response, 'Could not load the full overview.')
+    const pages = Object.values(payload?.query?.pages ?? {})
+    const page = pages.find((item) => item?.extract)
+    const excerpt = page?.extract?.trim()
 
-  if (!canonicalUrl || !excerpt) {
-    throw new Error('No sourced full overview available for this topic.')
+    if (!excerpt) {
+      throw new Error('No sourced full overview available for this topic.')
+    }
+
+    return sourceBlock('Wikipedia', canonicalUrl, excerpt)
+  } catch {
+    throw new Error('Could not load the full overview right now. Please try Brief mode.')
   }
-
-  return sourceBlock('Wikipedia', canonicalUrl, excerpt)
 }
 
 export async function fetchOfficialWebsiteSource(title) {
-  const summaryResponse = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-    { headers: { Accept: 'application/json' } },
-  )
-
-  if (!summaryResponse.ok) {
+  let summaryPayload
+  try {
+    const summaryResponse = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { headers: { Accept: 'application/json' } },
+    )
+    summaryPayload = await parseJsonResponse(summaryResponse, 'Could not load summary metadata.')
+  } catch {
     return null
   }
 
-  const summaryPayload = await summaryResponse.json()
   const wikidataId = summaryPayload?.wikibase_item
   if (!wikidataId) {
     return null
   }
 
-  const wikidataResponse = await fetch(
-    `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(wikidataId)}&props=claims|labels&languages=en&format=json&origin=*`,
-  )
-
-  if (!wikidataResponse.ok) {
+  let wikidataPayload
+  try {
+    const wikidataResponse = await fetch(
+      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(wikidataId)}&props=claims|labels&languages=en&format=json&origin=*`,
+    )
+    wikidataPayload = await parseJsonResponse(wikidataResponse, 'Could not load Wikidata details.')
+  } catch {
     return null
   }
 
-  const wikidataPayload = await wikidataResponse.json()
   const entity = wikidataPayload?.entities?.[wikidataId]
   const officialClaims = entity?.claims?.P856 ?? []
   const officialUrl = officialClaims?.[0]?.mainsnak?.datavalue?.value
@@ -141,4 +167,29 @@ export async function fetchOfficialWebsiteSource(title) {
     officialUrl,
     `Official website identified for ${label}.`,
   )
+}
+
+const DIVE_DEEPER_TEMPLATES = [
+  (topic) => `Types of ${topic}`,
+  (topic) => `How ${topic} grow`,
+  (topic) => `Where ${topic} grow`,
+  (topic) => `What is ${topic} good for`,
+]
+
+export async function fetchDeeperTopicSuggestions(topic) {
+  const baseTopic = topic.trim()
+  const suggestions = DIVE_DEEPER_TEMPLATES.map((createTemplate) => createTemplate(baseTopic))
+
+  try {
+    const response = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(baseTopic)}&srlimit=8&format=json&origin=*`,
+    )
+    const payload = await parseJsonResponse(response, 'Could not load related topics.')
+    const relatedTitles = (payload?.query?.search ?? []).map((item) => item?.title).filter(Boolean)
+    suggestions.push(...relatedTitles)
+  } catch {
+    return suggestions
+  }
+
+  return [...new Set(suggestions)].slice(0, 8)
 }

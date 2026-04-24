@@ -6,6 +6,7 @@ import ThoughtPile from './components/ThoughtPile'
 import { MAX_THOUGHT_LENGTH } from './lib/constants'
 import {
   fallbackMessage,
+  fetchDeeperTopicSuggestions,
   fetchBriefSource,
   fetchFullSource,
   fetchOfficialWebsiteSource,
@@ -31,6 +32,7 @@ function App() {
   const [resolvedTitle, setResolvedTitle] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [sources, setSources] = useState([])
+  const [deeperTopics, setDeeperTopics] = useState([])
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -46,6 +48,7 @@ function App() {
     setIsLoading(true)
     setErrorMessage('')
     setSources([])
+    setDeeperTopics([])
     try {
       const articleTitle = await resolveArticleTitle(thoughtText)
       if (!articleTitle) {
@@ -64,6 +67,8 @@ function App() {
         nextSources.push(officialSource)
       }
       setSources(nextSources)
+      const suggestions = await fetchDeeperTopicSuggestions(thoughtText.replace(/_/g, ' '))
+      setDeeperTopics(suggestions)
     } catch (error) {
       setErrorMessage(error.message || fallbackMessage())
     } finally {
@@ -120,8 +125,23 @@ function App() {
   function closePanelKeepThought() {
     setActiveThoughtId(null)
     setSources([])
+    setDeeperTopics([])
     setResolvedTitle('')
     setErrorMessage('')
+  }
+
+  function addSuggestedTopic(topic) {
+    const value = topic.trim().slice(0, MAX_THOUGHT_LENGTH)
+    if (!value) {
+      return
+    }
+
+    const exists = thoughts.some((thought) => thought.text.toLowerCase() === value.toLowerCase())
+    if (exists) {
+      return
+    }
+
+    setThoughts((previous) => [createThought(value), ...previous])
   }
 
   return (
@@ -147,8 +167,10 @@ function App() {
           isLoading={isLoading}
           errorMessage={errorMessage}
           sources={sources}
+          deeperTopics={deeperTopics}
           resolvedTitle={resolvedTitle}
           onModeChange={handleModeChange}
+          onAddSuggestedTopic={addSuggestedTopic}
           onDismiss={dismissActiveThought}
           onKeep={closePanelKeepThought}
         />

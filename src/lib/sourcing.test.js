@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fallbackMessage,
   fetchBriefSource,
+  fetchDeeperTopicSuggestions,
   fetchFullSource,
   fetchOfficialWebsiteSource,
   normalizeTitle,
@@ -61,6 +62,25 @@ describe('sourcing', () => {
     expect(result.excerpt).not.toContain('<p>')
   })
 
+  it('falls back to MediaWiki query when mobile sections fails', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          query: {
+            pages: {
+              1: { extract: 'Fallback full extract content.' },
+            },
+          },
+        }),
+      })
+
+    const result = await fetchFullSource('Dark matter')
+    expect(result.excerpt).toContain('Fallback full extract content.')
+  })
+
   it('returns wikidata official website when present', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     fetchMock
@@ -94,5 +114,21 @@ describe('sourcing', () => {
       url: 'https://example.org',
       excerpt: 'Official website identified for Example.',
     })
+  })
+
+  it('returns deeper topic suggestions with templates', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: {
+          search: [{ title: 'Mushroom farming' }],
+        },
+      }),
+    })
+
+    const results = await fetchDeeperTopicSuggestions('mushrooms')
+    expect(results).toContain('Types of mushrooms')
+    expect(results).toContain('How mushrooms grow')
+    expect(results).toContain('Mushroom farming')
   })
 })

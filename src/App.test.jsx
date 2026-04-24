@@ -23,6 +23,10 @@ vi.mock('./lib/sourcing', () => ({
     url: 'https://official.example',
     excerpt: 'Official website identified.',
   })),
+  fetchDeeperTopicSuggestions: vi.fn(async () => [
+    'Types of mushrooms',
+    'How mushrooms grow',
+  ]),
 }))
 
 describe('App integration', () => {
@@ -45,5 +49,6 @@ describe('App integration', () => {
 
     expect(await screen.findByText('Brief sourced content.')).toBeTruthy()
     expect(screen.getAllByText(/Source:/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Dive deeper')).toBeTruthy()
   })
 })

@@ -6,8 +6,10 @@ function SourcePanel({
   isLoading,
   errorMessage,
   sources,
+  deeperTopics,
   resolvedTitle,
   onModeChange,
+  onAddSuggestedTopic,
   onDismiss,
   onKeep,
 }) {
@@ -84,6 +86,20 @@ function SourcePanel({
               </article>
             ))}
           </div>
+
+          {deeperTopics.length > 0 && (
+            <section className="deeper-topics">
+              <h3>Dive deeper</h3>
+              <p>Add a follow-up curiosity to your pile:</p>
+              <div className="deeper-topic-list">
+                {deeperTopics.map((topic) => (
+                  <button type="button" key={topic} onClick={() => onAddSuggestedTopic(topic)}>
+                    + {topic}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
 
