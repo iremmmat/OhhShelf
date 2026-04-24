@@ -87,9 +87,11 @@ function SourcePanel({
           <div className="source-list">
             {sources.map((source) => (
               <article className="source-block" key={`${source.name}-${source.url}`}>
-                {source.excerpt.split('\n\n').map((paragraph, paragraphIndex) => (
-                  <p key={`${source.url}-${paragraphIndex}`}>{paragraph}</p>
-                ))}
+                <div className="source-excerpt">
+                  {source.excerpt.split('\n\n').map((paragraph, paragraphIndex) => (
+                    <p key={`${source.url}-${paragraphIndex}`}>{paragraph}</p>
+                  ))}
+                </div>
                 <p className="attribution">
                   Source: <strong>{source.name}</strong> -{' '}
                   <a href={source.url} target="_blank" rel="noreferrer">
