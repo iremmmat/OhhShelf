@@ -3,18 +3,23 @@ import './App.css'
 import SourcePanel from './components/SourcePanel'
 import ThoughtInput from './components/ThoughtInput'
 import ThoughtPile from './components/ThoughtPile'
+import LanguageToggle from './components/LanguageToggle'
+import CuriosityJournal from './components/CuriosityJournal'
+import FollowUpPrompt, { checkForFollowUps } from './components/FollowUpPrompt'
+import MonthlyReport, { checkForMonthlyReport } from './components/MonthlyReport'
 import { MAX_THOUGHT_LENGTH } from './lib/constants'
 import {
   fallbackMessage,
-  fetchDeeperTopicSuggestions,
+  fetchArticle,
   fetchBriefSource,
+  fetchDeeperTopicSuggestions,
   fetchFallbackSources,
   fetchFullSource,
   fetchOfficialWebsiteSource,
   normalizeTitle,
-  resolveArticleTitle,
 } from './lib/sourcing'
 import { loadStoredThoughts, persistThoughts } from './lib/storage'
+import { getLanguage, t } from './lib/i18n'
 
 function createThought(input) {
   return {
@@ -34,11 +39,31 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('')
   const [sources, setSources] = useState([])
   const [deeperTopics, setDeeperTopics] = useState([])
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [followUpOpen, setFollowUpOpen] = useState(false)
+  const [followUpThought, setFollowUpThought] = useState(null)
+  const [monthlyReportOpen, setMonthlyReportOpen] = useState(false)
   const inputRef = useRef(null)
+  const currentLang = getLanguage()
 
   useEffect(() => {
     persistThoughts(thoughts)
   }, [thoughts])
+
+  useEffect(() => {
+    // Check for follow-ups on app load
+    const followUp = checkForFollowUps()
+    if (followUp) {
+      setFollowUpThought(followUp)
+      setFollowUpOpen(true)
+    }
+    
+    // Check for monthly report
+    const shouldShowReport = checkForMonthlyReport()
+    if (shouldShowReport) {
+      setMonthlyReportOpen(true)
+    }
+  }, [])
 
   const activeThought = useMemo(
     () => thoughts.find((thought) => thought.id === activeThoughtId) ?? null,
@@ -51,34 +76,38 @@ function App() {
     setErrorMessage('')
     setSources([])
     setDeeperTopics([])
+  
     try {
-      const articleTitle = await resolveArticleTitle(thoughtText)
-      if (!articleTitle) {
-        throw new Error(fallbackMessage())
+      // Resolve the article once — get back title, language, content
+      const article = await fetchArticle(displayTopic, currentLang)
+  
+      if (article.showingFallbackLanguage) {
+        const langName = currentLang === 'fr' ? 'French' : 'Turkish'
+        setErrorMessage(t('articleNotAvailable').replace('{lang}', langName))
       }
-
-      setResolvedTitle(articleTitle)
-      const wikipediaSource =
-        selectedMode === 'brief'
-          ? await fetchBriefSource(articleTitle)
-          : await fetchFullSource(articleTitle)
-
-      const officialSource = await fetchOfficialWebsiteSource(articleTitle)
-      const nextSources = [wikipediaSource]
-      if (officialSource) {
-        nextSources.push(officialSource)
-      }
-      setSources(nextSources)
-      const suggestions = await fetchDeeperTopicSuggestions(displayTopic)
+  
+      setResolvedTitle(article.title)
+  
+      // Fetch content using the resolved title + language (no second lookup)
+      const mainSource = selectedMode === 'full'
+        ? await fetchFullSource(article.title, article.language)
+        : await fetchBriefSource(article.title, article.language)
+  
+      // Try official website (optional, silent fail)
+      const officialSource = await fetchOfficialWebsiteSource(article.title, article.language)
+  
+      setSources(officialSource ? [mainSource, officialSource] : [mainSource])
+  
+      // Dive deeper uses the same resolved title + language
+      const suggestions = await fetchDeeperTopicSuggestions(article.title, article.language)
       setDeeperTopics(suggestions)
+  
     } catch (error) {
       const fallbackSources = await fetchFallbackSources(displayTopic)
       if (fallbackSources.length > 0) {
-        setResolvedTitle(`Fallback results for ${displayTopic}`)
+        setResolvedTitle(`Results for ${displayTopic}`)
         setSources(fallbackSources)
-        const suggestions = await fetchDeeperTopicSuggestions(displayTopic)
-        setDeeperTopics(suggestions)
-        setErrorMessage('')
+        setDeeperTopics(getTemplateSuggestions(displayTopic))
       } else {
         setErrorMessage(error.message || fallbackMessage())
       }
@@ -130,15 +159,22 @@ function App() {
     if (!activeThoughtId) {
       return
     }
+    setJournalOpen(true)
+  }
+
+  function handleJournalSave(journalEntry) {
+    // The journal entry is already saved in the component
+    // Now remove the thought
     removeThought(activeThoughtId)
   }
 
-  function closePanelKeepThought() {
-    setActiveThoughtId(null)
-    setSources([])
-    setDeeperTopics([])
-    setResolvedTitle('')
-    setErrorMessage('')
+  function handleJournalSkip() {
+    // User skipped journal, just remove the thought
+    removeThought(activeThoughtId)
+  }
+
+  function handleMonthlyReportClose() {
+    setMonthlyReportOpen(false)
   }
 
   function addSuggestedTopic(topic) {
@@ -155,12 +191,26 @@ function App() {
     setThoughts((previous) => [createThought(value), ...previous])
   }
 
+  function closePanelKeepThought() {
+    setActiveThoughtId(null)
+    setSources([])
+    setDeeperTopics([])
+    setResolvedTitle('')
+    setErrorMessage('')
+  }
+
+  function handleFollowUpClose() {
+    setFollowUpOpen(false)
+    setFollowUpThought(null)
+  }
+
   return (
     <div className="app-shell">
       <aside className="left-shell">
         <header className="top-bar">
-          <h1>Ooh Shelf</h1>
-          <p>Capture fleeting curiosities. Explore them later with real sources.</p>
+          <h1>{t('appTitle')}</h1>
+          <p>{t('appSubtitle')}</p>
+          <LanguageToggle />
         </header>
       </aside>
 
@@ -190,6 +240,25 @@ function App() {
           />
         </main>
       </div>
+      
+      <CuriosityJournal
+        thought={activeThought}
+        isOpen={journalOpen}
+        onClose={handleJournalSkip}
+        onSave={handleJournalSave}
+      />
+      
+      <FollowUpPrompt
+        isOpen={followUpOpen}
+        onClose={handleFollowUpClose}
+        thoughtText={followUpThought?.thoughtText}
+        thoughtId={followUpThought?.thoughtId}
+      />
+      
+      <MonthlyReport
+        isOpen={monthlyReportOpen}
+        onClose={handleMonthlyReportClose}
+      />
     </div>
   )
 }

@@ -1,13 +1,15 @@
+import { t } from '../lib/i18n'
+
 function ThoughtPile({ thoughts, onOpenThought, onRemoveThought }) {
   return (
     <>
       <div className="pile-header">
-        <h2>The Pile</h2>
-        <span>{thoughts.length} pending</span>
+        <h2>{t('thePile')}</h2>
+        <span>{thoughts.length} {t('pending')}</span>
       </div>
 
       {thoughts.length === 0 ? (
-        <p className="empty-state">Your shelf is empty. Capture any curiosity in under 5 seconds.</p>
+        <p className="empty-state">{t('emptyShelf')}</p>
       ) : (
         <ul className="thought-list">
           {thoughts.map((thought) => (
@@ -19,7 +21,7 @@ function ThoughtPile({ thoughts, onOpenThought, onRemoveThought }) {
                 className="remove-button"
                 type="button"
                 onClick={() => onRemoveThought(thought.id)}
-                aria-label={`Remove ${thought.text}`}
+                aria-label={`${t('remove')} ${thought.text}`}
               >
                 x
               </button>

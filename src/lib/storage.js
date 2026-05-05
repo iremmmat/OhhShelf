@@ -1,4 +1,4 @@
-import { STORAGE_KEY } from './constants'
+import { STORAGE_KEY, LANGUAGE_KEY, JOURNAL_KEY, FOLLOWUPS_KEY, REPORT_KEY, MAX_THOUGHT_LENGTH } from "./constants";
 
 export function loadStoredThoughts() {
   try {

@@ -1,4 +1,5 @@
 import { fallbackMessage, normalizeTitle } from '../lib/sourcing'
+import { getLanguage, t } from '../lib/i18n'
 
 function SourcePanel({
   activeThought,
@@ -13,11 +14,12 @@ function SourcePanel({
   onDismiss,
   onKeep,
 }) {
+  const currentLang = getLanguage()
   const externalSources = activeThought
     ? [
         {
           label: 'Wikipedia',
-          href: `https://en.wikipedia.org/wiki/${normalizeTitle(activeThought.text)}`,
+          href: `https://${currentLang}.wikipedia.org/wiki/${normalizeTitle(activeThought.text)}`,
         },
         {
           label: 'Wikidata',
@@ -45,28 +47,28 @@ function SourcePanel({
   return (
     <section className="source-panel">
       <div className="panel-header">
-        <h2>{activeThought ? activeThought.text : 'Select a thought to explore'}</h2>
+        <h2>{activeThought ? activeThought.text : t('placeholder')}</h2>
         <div className="mode-toggle" role="group" aria-label="Content mode">
           <button
             type="button"
             className={mode === 'brief' ? 'active' : ''}
             onClick={() => onModeChange('brief')}
           >
-            Brief
+            {t('brief')}
           </button>
           <button
             type="button"
             className={mode === 'full' ? 'active' : ''}
             onClick={() => onModeChange('full')}
           >
-            Full
+            {t('full')}
           </button>
         </div>
       </div>
 
-      {!activeThought && <p className="placeholder">Tap any thought tag to load attributed content.</p>}
+      {!activeThought && <p className="placeholder">{t('placeholder')}</p>}
 
-      {activeThought && isLoading && <p className="placeholder">Fetching sourced content...</p>}
+      {activeThought && isLoading && <p className="placeholder">{t('loading')}</p>}
 
       {activeThought && !isLoading && errorMessage && (
         <div className="error-box">
@@ -83,7 +85,7 @@ function SourcePanel({
 
       {activeThought && !isLoading && sources.length > 0 && (
         <>
-          <p className="matched-title">Matched: {resolvedTitle} - Wikipedia</p>
+          <p className="matched-title">{t('matched')}: {resolvedTitle} - {t('wikipedia')}</p>
           <div className="source-list">
             {sources.map((source) => (
               <article className="source-block" key={`${source.name}-${source.url}`}>
@@ -93,7 +95,7 @@ function SourcePanel({
                   ))}
                 </div>
                 <p className="attribution">
-                  Source: <strong>{source.name}</strong> -{' '}
+                  {t('source')}: <strong>{source.name}</strong> -{' '}
                   <a href={source.url} target="_blank" rel="noreferrer">
                     {source.url}
                   </a>
@@ -104,14 +106,31 @@ function SourcePanel({
 
           {deeperTopics.length > 0 && (
             <section className="deeper-topics">
-              <h3>Dive deeper</h3>
-              <p>Add a follow-up curiosity to your pile:</p>
+              <h3>{t('diveDeeper')}</h3>
+              <p>{t('addFollowUp')}</p>
               <div className="deeper-topic-list">
-                {deeperTopics.map((topic) => (
-                  <button type="button" key={topic} onClick={() => onAddSuggestedTopic(topic)}>
-                    + {topic}
-                  </button>
-                ))}
+                {deeperTopics.map((topic, index) => {
+                  // Check if this is the last item and contains the Wikipedia link text
+                  const isWikipediaLink = index === deeperTopics.length - 1 && 
+                    (topic.includes('Read full article') || topic.includes('Lire l\'article') || topic.includes('Wikipedia\'da makale'))
+                  
+                  if (isWikipediaLink) {
+                    const currentLang = getLanguage()
+                    const articleTitle = activeThought?.text
+                    const wikipediaUrl = `https://${currentLang}.wikipedia.org/wiki/${normalizeTitle(articleTitle)}`
+                    return (
+                      <a key={topic} href={wikipediaUrl} target="_blank" rel="noreferrer" className="wikipedia-link">
+                        {topic}
+                      </a>
+                    )
+                  }
+                  // Regular section button or template suggestion
+                  return (
+                    <button type="button" key={topic} onClick={() => onAddSuggestedTopic(topic)}>
+                      + {topic}
+                    </button>
+                  )
+                })}
               </div>
             </section>
           )}
@@ -121,10 +140,10 @@ function SourcePanel({
       {activeThought && (
         <div className="panel-actions">
           <button type="button" className="danger" onClick={onDismiss}>
-            Mark explored
+            {t('markExplored')}
           </button>
           <button type="button" className="button-secondary" onClick={onKeep}>
-            Keep in pile
+            {t('keepInPile')}
           </button>
         </div>
       )}

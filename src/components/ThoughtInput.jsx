@@ -1,11 +1,12 @@
 import { MAX_THOUGHT_LENGTH } from '../lib/constants'
+import { t } from '../lib/i18n'
 
 function ThoughtInput({ input, onInputChange, onSubmit, inputRef }) {
   const hasInput = input.trim().length > 0
 
   return (
     <form className="thought-form" onSubmit={onSubmit}>
-      <label htmlFor="thought-input">Add a thought</label>
+      <label htmlFor="thought-input">{t('addThought')}</label>
       <div className="input-row">
         <input
           ref={inputRef}
@@ -17,7 +18,7 @@ function ThoughtInput({ input, onInputChange, onSubmit, inputRef }) {
           onChange={(event) => onInputChange(event.target.value)}
         />
         <button type="submit" disabled={!hasInput} className="button-primary">
-          Add
+          {t('add')}
         </button>
       </div>
       <small>
