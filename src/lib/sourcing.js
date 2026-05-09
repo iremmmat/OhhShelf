@@ -1,316 +1,241 @@
-import { t } from './i18n'
+import { t } from './i18n';
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
 export function normalizeTitle(value) {
-  return value.trim().replace(/\s+/g, '_')
+  return value.trim().split(' ').join('_');
 }
 
 export function fallbackMessage() {
-  return "We couldn't find sourced information on this topic yet. Try these sources:"
+  return "We couldn't find verified sources for this topic. Please try a different term.";
 }
 
-export function sourceBlock(name, url, excerpt) {
-  return { name, url, excerpt }
-}
-
-export function toBriefParagraphs(excerpt) {
-  const sentences = excerpt.split(/(?<=[.!?])\s+/).filter(Boolean)
-  if (sentences.length <= 3) return [excerpt]
-  const chunkSize = Math.ceil(sentences.length / 3)
-  const chunks = []
-  for (let i = 0; i < 3; i++) {
-    const chunk = sentences.slice(i * chunkSize, i * chunkSize + chunkSize).join(' ').trim()
-    if (chunk) chunks.push(chunk)
-  }
-  return chunks
-}
-
-export function stripHtml(value) {
-  if (!value) return ''
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(value, 'text/html')
-  return (doc.body.textContent ?? '').trim()
+export function sourceBlock(name, url, excerpt, citations) {
+  if (!citations) citations = [];
+  return { name: name, url: url, excerpt: excerpt, citations: citations };
 }
 
 async function parseJsonResponse(response, message) {
-  if (!response.ok) throw new Error(message)
-  return response.json()
+  if (!response.ok) throw new Error(message);
+  return response.json();
 }
 
-// ─── Core Article Resolver ────────────────────────────────────────────────────
-//
-// This is the single source of truth for finding the right Wikipedia article.
-// Call this once, get back { title, language, showingFallbackLanguage }.
-// All other functions accept a pre-resolved title + language.
+// ─── API Clients (Groq, Tavily, Semantic Scholar) ─────────────────────────
+
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const TAVILY_API_KEY = import.meta.env.VITE_TAVILY_API_KEY;
+
+// 1. Intent Router
+async function determineIntent(topic) {
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant', 
+        temperature: 0.0,
+        messages: [
+          { 
+            role: 'system', 
+            content: "Analyze the topic (max 150 chars). If it's a scientific theory, research, or academic concept, return strictly the word 'ACADEMIC'. Otherwise, return 'GENERAL'. No other text." 
+          },
+          { role: 'user', content: topic }
+        ]
+      })
+    });
+    const data = await res.json();
+    return data.choices[0].message.content.trim() === 'ACADEMIC' ? 'ACADEMIC' : 'GENERAL';
+  } catch (error) {
+    console.warn("Intent Router Error:", error);
+    return 'GENERAL';
+  }
+}
+
+// 2. Tavily Search
+async function fetchFromTavily(topic) {
+  const res = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: TAVILY_API_KEY,
+      query: topic,
+      search_depth: "basic",
+      include_answer: false,
+      max_results: 3
+    })
+  });
+  const data = await parseJsonResponse(res, 'Tavily API error');
+  return data.results.map(function(r, index) { 
+    return "[Source " + (index + 1) + "] URL: " + r.url + " | Content: " + r.content; 
+  }).join('\n\n');
+}
+
+// 3. Semantic Scholar
+async function fetchFromSemanticScholar(topic) {
+  const url = "https://api.semanticscholar.org/graph/v1/paper/search?query=" + encodeURIComponent(topic) + "&limit=3&fields=title,url,abstract,year";
+  const res = await fetch(url);
+  const data = await parseJsonResponse(res, 'Semantic Scholar API error');
+  if (!data.data || data.data.length === 0) throw new Error("No academic data found");
+  return data.data.map(function(p, index) { 
+    return "[Source " + (index + 1) + "] URL: " + p.url + " | Title: " + p.title + " (" + p.year + ") | Abstract: " + p.abstract; 
+  }).join('\n\n');
+}
+
+// 4. Groq RAG Translation/Synthesis
+async function generateSourcedSummary(topic, rawContext, lang, mode) {
+  const lengthInstruction = mode === 'full' ? 'Provide a comprehensive overview (4-5 paragraphs).' : 'Provide a brief, direct introduction (2 paragraphs).';
+  
+  // DİL MANTIĞI DÜZELTİLDİ
+  let targetLang = 'English';
+  if (lang === 'tr') targetLang = 'Turkish';
+  if (lang === 'fr') targetLang = 'French';
+  
+  let systemPrompt = "You are a strict translation and summarization engine for a knowledge app.\n" +
+    "YOUR TASK: Summarize the provided context regarding the topic '" + topic + "' into the target language: " + targetLang + ".\n" +
+    "STRICT RULES:\n" +
+    "1. Use ONLY the provided context. Do NOT invent or add external facts.\n" +
+    "2. " + lengthInstruction + "\n" +
+    "3. You MUST cite your claims using inline brackets pointing to the source number from the context (e.g., [1], [2]).\n" +
+    "4. If the context is empty or irrelevant, reply exactly with: 'ERROR_NO_INFO'.\n" +
+    "5. Output your response as a valid JSON object with two keys: 'text' (the summary string) and 'citations' (an array of URLs exactly matching the source numbers used).\n" +
+    "Example Output: {'text': 'Employee engagement is crucial [1].', 'citations': ['https://url1.com']}";
+  
+  systemPrompt = systemPrompt.split("'").join('"');
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + GROQ_API_KEY
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: rawContext }
+      ]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error("Groq API Error: " + res.status + " - " + errText);
+  }
+
+  const data = await res.json();
+  let contentString = data.choices[0].message.content;
+  
+  const md = String.fromCharCode(96, 96, 96);
+  contentString = contentString.split(md + "json").join("").split(md).join("").trim();
+  
+  const startIdx = contentString.indexOf('{');
+  const endIdx = contentString.lastIndexOf('}');
+  if (startIdx !== -1 && endIdx !== -1) {
+    contentString = contentString.substring(startIdx, endIdx + 1);
+  }
+  
+  const resultObj = JSON.parse(contentString);
+  
+  if (resultObj.text === 'ERROR_NO_INFO') throw new Error('No relevant information found in sources.');
+  return resultObj;
+}
+
+// ─── Core Application Methods (Mapped to App.jsx) ─────────────────────────────
 
 export async function fetchArticle(userQuery, lang) {
-  const query = userQuery.replace(/_/g, ' ').trim()
-
-  // STEP 1 — If non-English, search target language Wikipedia directly first.
-  // This handles cases where the user types in the target language (e.g. "renkler" in TR mode).
-  if (lang !== 'en') {
-    try {
-      const res = await fetch(
-        `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=3&format=json&origin=*`
-      )
-      const data = await parseJsonResponse(res, '')
-      const title = data?.[1]?.[0]
-      if (title) {
-        const summaryRes = await fetch(
-          `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-          { headers: { Accept: 'application/json' } }
-        )
-        const summary = await parseJsonResponse(summaryRes, '')
-        if (summary?.extract) {
-          return { title, language: lang, showingFallbackLanguage: false, content: summary }
-        }
-      }
-    } catch {
-      // fall through to step 2
-    }
-  }
-
-  // STEP 2 — Search English Wikipedia to get the canonical article title.
-  let englishTitle = null
-  try {
-    const res = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=3&format=json&origin=*`
-    )
-    const data = await parseJsonResponse(res, '')
-    englishTitle = data?.[1]?.[0] ?? null
-  } catch {
-    // fall through
-  }
-
-  if (!englishTitle) {
-    throw new Error('No article found for this topic.')
-  }
-
-  // STEP 3 — If non-English, use langlinks to find the equivalent title.
-  if (lang !== 'en') {
-    try {
-      const res = await fetch(
-        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(englishTitle)}&prop=langlinks&lllang=${lang}&format=json&origin=*`
-      )
-      const data = await parseJsonResponse(res, '')
-      const pages = Object.values(data?.query?.pages ?? {})
-      const localTitle = pages.find(p => p?.langlinks)?.[`langlinks`]?.[0]?.['*'] ?? null
-
-      if (localTitle) {
-        const summaryRes = await fetch(
-          `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(localTitle)}`,
-          { headers: { Accept: 'application/json' } }
-        )
-        const summary = await parseJsonResponse(summaryRes, '')
-        if (summary?.extract) {
-          return { title: localTitle, language: lang, showingFallbackLanguage: false, content: summary }
-        }
-      }
-    } catch {
-      // fall through to step 4
-    }
-  }
-
-  // STEP 4 — Fallback: return English article with a notice flag.
-  const summaryRes = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(englishTitle)}`,
-    { headers: { Accept: 'application/json' } }
-  )
-  const summary = await parseJsonResponse(summaryRes, 'Could not load article.')
-  return { title: englishTitle, language: 'en', showingFallbackLanguage: lang !== 'en', content: summary }
+  const topic = userQuery.split('_').join(' ').trim();
+  const intent = await determineIntent(topic);
+  return { title: topic, language: lang, intent: intent, showingFallbackLanguage: false };
 }
 
-// ─── Brief Source ─────────────────────────────────────────────────────────────
-// Accepts a pre-resolved article title + language from fetchArticle.
+async function getSourcedContent(title, lang, mode, intent) {
+  let rawContext = "";
+  try {
+    if (intent === 'ACADEMIC') {
+      try {
+        rawContext = await fetchFromSemanticScholar(title);
+      } catch (semanticError) {
+        console.warn("Semantic Scholar failed, falling back to Tavily:", semanticError);
+        rawContext = await fetchFromTavily(title);
+      }
+    } else {
+      rawContext = await fetchFromTavily(title);
+    }
+
+    if (!rawContext) throw new Error("Search engines returned empty data.");
+
+    const aiResult = await generateSourcedSummary(title, rawContext, lang, mode);
+    return sourceBlock('AI Knowledge Engine', '#', aiResult.text, aiResult.citations);
+
+  } catch (error) {
+    console.error("FETCHING ERROR (getSourcedContent):", error);
+    throw new Error(fallbackMessage());
+  }
+}
 
 export async function fetchBriefSource(resolvedTitle, lang) {
-  const canonicalUrl = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle.replace(/ /g, '_'))}`
-  try {
-    const res = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(resolvedTitle)}`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const payload = await parseJsonResponse(res, 'Could not load summary.')
-    const excerpt = payload?.extract
-    const url = payload?.content_urls?.desktop?.page ?? canonicalUrl
-    if (!excerpt) throw new Error('No summary available.')
-    return sourceBlock('Wikipedia', url, toBriefParagraphs(excerpt).join('\n\n'))
-  } catch {
-    throw new Error('Could not load a Wikipedia summary.')
-  }
+  const intent = await determineIntent(resolvedTitle);
+  return await getSourcedContent(resolvedTitle, lang, 'brief', intent);
 }
-
-// ─── Full Source ──────────────────────────────────────────────────────────────
-// Accepts a pre-resolved article title + language from fetchArticle.
 
 export async function fetchFullSource(resolvedTitle, lang) {
-  const canonicalUrl = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle.replace(/ /g, '_'))}`
-
-  // Try mobile-sections first (best structure)
-  try {
-    const res = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/mobile-sections/${encodeURIComponent(resolvedTitle)}`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const payload = await parseJsonResponse(res, '')
-    const excerpt = (payload?.lead?.sections ?? [])
-      .map(s => stripHtml(s?.text))
-      .filter(Boolean)
-      .join('\n\n')
-      .trim()
-    if (excerpt) return sourceBlock('Wikipedia', canonicalUrl, excerpt)
-  } catch {
-    // fall through
-  }
-
-  // Fallback: extracts API
-  try {
-    const res = await fetch(
-      `https://${lang}.wikipedia.org/w/api.php?action=query&prop=extracts&titles=${encodeURIComponent(resolvedTitle)}&explaintext=1&format=json&origin=*`
-    )
-    const payload = await parseJsonResponse(res, '')
-    const pages = Object.values(payload?.query?.pages ?? {})
-    const excerpt = pages.find(p => p?.extract)?.extract?.trim()
-    if (excerpt) return sourceBlock('Wikipedia', canonicalUrl, excerpt)
-  } catch {
-    // fall through
-  }
-
-  throw new Error('Could not load the full overview. Please try Brief mode.')
+  const intent = await determineIntent(resolvedTitle);
+  return await getSourcedContent(resolvedTitle, lang, 'full', intent);
 }
-
-// ─── Official Website ─────────────────────────────────────────────────────────
-// Accepts a pre-resolved article title + language from fetchArticle.
 
 export async function fetchOfficialWebsiteSource(resolvedTitle, lang) {
-  try {
-    const summaryRes = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(resolvedTitle)}`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const summaryPayload = await parseJsonResponse(summaryRes, '')
-    const wikidataId = summaryPayload?.wikibase_item
-    if (!wikidataId) return null
-
-    const wdRes = await fetch(
-      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(wikidataId)}&props=claims|labels&languages=${lang}&format=json&origin=*`
-    )
-    const wdPayload = await parseJsonResponse(wdRes, '')
-    const entity = wdPayload?.entities?.[wikidataId]
-    const officialUrl = entity?.claims?.P856?.[0]?.mainsnak?.datavalue?.value
-    if (!officialUrl) return null
-
-    const label = entity?.labels?.[lang]?.value || resolvedTitle
-    return sourceBlock('Wikidata', officialUrl, `Official website for ${label}.`)
-  } catch {
-    return null
-  }
-}
-
-// ─── Dive Deeper Suggestions ──────────────────────────────────────────────────
-// Accepts a pre-resolved article title + language from fetchArticle.
-
-const UNWANTED_SECTIONS = new Set([
-  // English
-  'references', 'see also', 'external links', 'bibliography', 'notes',
-  'citations', 'sources', 'further reading', 'gallery', 'footnotes',
-  // French
-  'références', 'voir aussi', 'liens externes', 'bibliographie',
-  'pour aller plus loin', 'galerie', 'catégories',
-  // Turkish
-  'kaynakça', 'ayrıca bakınız', 'dış bağlantılar', 'bibliyografi',
-  'notlar', 'atıflar', 'kaynaklar', 'daha fazla okuma', 'galeri',
-])
-
-function isWantedSection(title) {
-  return !UNWANTED_SECTIONS.has(title.toLowerCase().trim())
-}
-
-function getTemplateSuggestions(topic) {
-  return [
-    `${t('typesOf')} ${topic}`,
-    `${t('howWorks')} ${topic}`,
-    `${t('whereFound')}`,
-    `${t('usedFor')} ${topic}`,
-  ]
+  return null; 
 }
 
 export async function fetchDeeperTopicSuggestions(resolvedTitle, lang) {
   try {
-    const res = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/mobile-sections/${encodeURIComponent(resolvedTitle)}`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const payload = await parseJsonResponse(res, '')
-    const sections = payload?.remaining?.sections ?? []
+    // DİL MANTIĞI DÜZELTİLDİ
+    let targetLang = 'English';
+    if (lang === 'tr') targetLang = 'Turkish';
+    if (lang === 'fr') targetLang = 'French';
+    
+    const promptContent = "Generate exactly 4 short, interesting follow-up questions or sub-topics to explore regarding '" + resolvedTitle + "'. The output must be strictly a JSON array of strings in " + targetLang + ". No other text.";
+    
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant', 
+        temperature: 0.7,
+        messages: [
+          { role: 'system', content: promptContent }
+        ]
+      })
+    });
+    
+    const data = await res.json();
+    let contentString = data.choices[0].message.content;
+    
+    const md = String.fromCharCode(96, 96, 96);
+    contentString = contentString.split(md + "json").join("").split(md).join("").trim();
+    
+    const startIdx = contentString.indexOf('[');
+    const endIdx = contentString.lastIndexOf(']');
+    if (startIdx !== -1 && endIdx !== -1) {
+      contentString = contentString.substring(startIdx, endIdx + 1);
+    }
 
-    const titles = sections
-      .map(s => s?.line?.trim())
-      .filter(Boolean)
-      .filter(isWantedSection)
-      .slice(0, 6)
-
-    const suggestions = titles.length >= 2 ? titles : getTemplateSuggestions(resolvedTitle)
-    return [...suggestions, t('readFullArticle')]
-  } catch {
-    return [...getTemplateSuggestions(resolvedTitle), t('readFullArticle')]
+    let questions = JSON.parse(contentString);
+    return questions;
+  } catch (error) {
+    console.warn("Follow-up generation error:", error);
+    return ["More about " + resolvedTitle, "How does " + resolvedTitle + " work?"];
   }
 }
 
-// ─── Fallback Sources ─────────────────────────────────────────────────────────
-
-async function fetchWikidataFallback(topic) {
-  const res = await fetch(
-    `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(topic)}&language=en&limit=3&format=json&origin=*`
-  )
-  const payload = await parseJsonResponse(res, '')
-  return (payload?.search ?? [])
-    .filter(e => e?.id && e?.concepturi)
-    .map(e => sourceBlock('Wikidata', e.concepturi, e.description || `Entity result for ${e.label || topic}.`))
-}
-
-async function fetchOpenLibraryFallback(topic) {
-  const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=3`)
-  const payload = await parseJsonResponse(res, '')
-  return (payload?.docs ?? [])
-    .filter(doc => doc?.key || doc?.title)
-    .map(doc => {
-      const url = doc.key ? `https://openlibrary.org${doc.key}` : 'https://openlibrary.org/'
-      const author = Array.isArray(doc.author_name) && doc.author_name[0] ? doc.author_name[0] : null
-      const year = doc.first_publish_year ? ` (${doc.first_publish_year})` : ''
-      const excerpt = author ? `${doc.title || topic} by ${author}${year}.` : `${doc.title || topic}${year}.`
-      return sourceBlock('OpenLibrary', url, excerpt)
-    })
-}
-
-async function fetchCrossrefFallback(topic) {
-  const res = await fetch(`https://api.crossref.org/works?query=${encodeURIComponent(topic)}&rows=3`)
-  const payload = await parseJsonResponse(res, '')
-  return (payload?.message?.items ?? [])
-    .filter(item => item?.URL && Array.isArray(item?.title) && item.title[0])
-    .map(item => {
-      const year = item?.issued?.['date-parts']?.[0]?.[0]
-      const excerpt = year ? `${item.title[0]} (${year}).` : `${item.title[0]}.`
-      return sourceBlock('Crossref', item.URL, excerpt)
-    })
-}
-
 export async function fetchFallbackSources(topic) {
-  const results = await Promise.allSettled([
-    fetchWikidataFallback(topic),
-    fetchOpenLibraryFallback(topic),
-    fetchCrossrefFallback(topic),
-  ])
-  const sources = results
-    .filter(r => r.status === 'fulfilled')
-    .flatMap(r => r.value)
-
-  const seen = new Set()
-  return sources.filter(s => {
-    const key = `${s.name}|${s.url}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  }).slice(0, 8)
+  return [];
 }

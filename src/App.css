@@ -863,3 +863,88 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- MOBİL UYUMLULUK (RESPONSIVE) TASARIMI --- */
+
+.mobile-header {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: #faf9f8;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  cursor: pointer;
+  color: #C96F35;
+  padding: 0;
+}
+
+.mobile-close-btn {
+  display: none;
+  text-align: right;
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  cursor: pointer;
+  padding: 10px 10px 20px 10px;
+  width: 100%;
+  color: #6b7280;
+}
+
+/* Ekran boyutu 768px'den küçükse bu kuralları uygula */
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  
+  .mobile-header {
+    display: flex;
+  }
+
+  /* Sol menüyü mobil ekranda sabitler ve dışarı saklar */
+  .left-shell {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    z-index: 2000;
+    background-color: #faf9f8;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    box-shadow: 4px 0 25px rgba(0,0,0,0.15);
+    border-right: none;
+  }
+
+  /* Menü açıldığında ekrana kaydırır */
+  .left-shell.open {
+    transform: translateX(0);
+  }
+
+  .mobile-close-btn {
+    display: block;
+  }
+
+  /* Panelleri alt alta dizer */
+  .layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .pile-panel, .source-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    min-height: 50vh;
+  }
+  
+  /* Telefonda büyük logoyu gizler */
+  .desktop-logo-container {
+    display: none;
+  }
+}

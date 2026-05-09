@@ -1,5 +1,48 @@
+import React from 'react'
 import { fallbackMessage, normalizeTitle } from '../lib/sourcing'
 import { getLanguage, t } from '../lib/i18n'
+
+// --- YENİ: Metin içi [1] referanslarını linke dönüştüren yardımcı bileşen ---
+function SourcedText({ text, citations }) {
+  if (!citations || citations.length === 0) return <span>{text}</span>;
+
+  // [1], [2] gibi yapıları yakalamak için Regex kullanıyoruz
+  const parts = text.split(/(\[\d+\])/g);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(/\[(\d+)\]/);
+        if (match) {
+          const citeIndex = parseInt(match[1], 10) - 1; // [1] -> citations[0]
+          const url = citations[citeIndex];
+          if (url) {
+            return (
+              <a 
+                key={i} 
+                href={url} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="citation-link" 
+                title={url}
+                style={{ 
+                  color: '#2563eb', 
+                  textDecoration: 'none', 
+                  fontSize: '0.85em', 
+                  verticalAlign: 'super',
+                  margin: '0 2px'
+                }}
+              >
+                {part}
+              </a>
+            );
+          }
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
 
 function SourcePanel({
   activeThought,
@@ -30,16 +73,8 @@ function SourcePanel({
           href: `https://www.britannica.com/search?query=${encodeURIComponent(activeThought.text)}`,
         },
         {
-          label: 'Stanford Encyclopedia',
-          href: `https://plato.stanford.edu/search/searcher.py?query=${encodeURIComponent(activeThought.text)}`,
-        },
-        {
           label: 'Google Scholar',
           href: `https://scholar.google.com/scholar?q=${encodeURIComponent(activeThought.text)}`,
-        },
-        {
-          label: 'Google',
-          href: `https://www.google.com/search?q=${encodeURIComponent(activeThought.text)}`,
         },
       ]
     : []
@@ -68,7 +103,7 @@ function SourcePanel({
 
       {!activeThought && <p className="placeholder">{t('placeholder')}</p>}
 
-      {activeThought && isLoading && <p className="placeholder">{t('loading')}</p>}
+      {activeThought && isLoading && <p className="placeholder">{t('loading')} (Yapay zeka kaynakları tarıyor...)</p>}
 
       {activeThought && !isLoading && errorMessage && (
         <div className="error-box">
@@ -85,21 +120,43 @@ function SourcePanel({
 
       {activeThought && !isLoading && sources.length > 0 && (
         <>
-          <p className="matched-title">{t('matched')}: {resolvedTitle} - {t('wikipedia')}</p>
+          <p className="matched-title">{t('matched')}: {resolvedTitle}</p>
           <div className="source-list">
-            {sources.map((source) => (
-              <article className="source-block" key={`${source.name}-${source.url}`}>
+            {sources.map((source, index) => (
+              <article className="source-block" key={`source-${index}`}>
                 <div className="source-excerpt">
                   {source.excerpt.split('\n\n').map((paragraph, paragraphIndex) => (
-                    <p key={`${source.url}-${paragraphIndex}`}>{paragraph}</p>
+                    <p key={`para-${paragraphIndex}`}>
+                      {/* YENİ: Paragrafları SourcedText bileşeninden geçiriyoruz */}
+                      <SourcedText text={paragraph} citations={source.citations} />
+                    </p>
                   ))}
                 </div>
-                <p className="attribution">
-                  {t('source')}: <strong>{source.name}</strong> -{' '}
-                  <a href={source.url} target="_blank" rel="noreferrer">
-                    {source.url}
-                  </a>
-                </p>
+                
+                {/* YENİ: Eğer yapay zeka çoklu kaynak döndürdüyse listele, yoksa eski tekil URL'yi göster */}
+                {source.citations && source.citations.length > 0 ? (
+                  <div className="attribution" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
+                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#6b7280' }}>Kullanılan Kaynaklar:</p>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.8rem', color: '#4b5563' }}>
+                      {source.citations.map((url, i) => (
+                        <li key={i}>
+                          <a href={url} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
+                            {new URL(url).hostname.replace('www.', '')}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  source.url !== '#' && (
+                    <p className="attribution">
+                      {t('source')}: <strong>{source.name}</strong> -{' '}
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        {source.url}
+                      </a>
+                    </p>
+                  )
+                )}
               </article>
             ))}
           </div>
@@ -110,7 +167,6 @@ function SourcePanel({
               <p>{t('addFollowUp')}</p>
               <div className="deeper-topic-list">
                 {deeperTopics.map((topic, index) => {
-                  // Check if this is the last item and contains the Wikipedia link text
                   const isWikipediaLink = index === deeperTopics.length - 1 && 
                     (topic.includes('Read full article') || topic.includes('Lire l\'article') || topic.includes('Wikipedia\'da makale'))
                   
@@ -124,7 +180,7 @@ function SourcePanel({
                       </a>
                     )
                   }
-                  // Regular section button or template suggestion
+                  
                   return (
                     <button type="button" key={topic} onClick={() => onAddSuggestedTopic(topic)}>
                       + {topic}
